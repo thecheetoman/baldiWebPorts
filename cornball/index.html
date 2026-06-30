@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+  <base href="https://cdn.jsdelivr.net/gh/thecheetoman/baldiWebPorts@main/cornball">
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>Unity WebGL Player | corny</title>
+  <link rel="shortcut icon" href="TemplateData/favicon.ico">
+  <link rel="stylesheet" href="TemplateData/style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+</head>
+
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+    <div id="unity-loading-bar">
+      <div id="unity-logo"></div>
+      <div id="unity-progress-bar-empty">
+        <div id="unity-progress-bar-full"></div>
+      </div>
+    </div>
+    <div id="unity-warning"></div>
+  </div>
+  <script>
+    window.addEventListener("load", () => { "serviceWorker" in navigator && navigator.serviceWorker.register("ServiceWorker.js"); });
+
+    const container = document.querySelector("#unity-container");
+    const canvas = document.querySelector("#unity-canvas");
+    const loadingBar = document.querySelector("#unity-loading-bar");
+    const progressBarFull = document.querySelector("#unity-progress-bar-full");
+    const warningBanner = document.querySelector("#unity-warning");
+
+    function unityShowBanner(msg, type) {
+      function u() { warningBanner.style.display = warningBanner.children.length ? 'block' : 'none'; }
+      const div = document.createElement('div');
+      div.innerHTML = msg;
+      warningBanner.appendChild(div);
+      if (type == "error") div.style = 'background:red;padding:10px;';
+      else {
+        if (type == "warning") div.style = 'background:yellow;padding:10px;';
+        setTimeout(() => { warningBanner.removeChild(div); u(); }, 5000);
+      }
+      u();
+    }
+
+    const buildUrl = "Build";
+    const loaderUrl = buildUrl + "/cornball.loader.js";
+
+    const config = {
+      dataUrl: "",
+      frameworkUrl: buildUrl + "/cornball.framework.js",
+      codeUrl: "",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "DefaultCompany",
+      productName: "corny",
+      productVersion: "1.4.3",
+      showBanner: unityShowBanner
+    };
+
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      const meta = document.createElement("meta");
+      meta.name = "viewport";
+      meta.content = "width=device-width,height=device-height,initial-scale=1.0,user-scalable=no,shrink-to-fit=yes";
+      document.head.appendChild(meta);
+    }
+
+    function mergeFiles(parts) {
+      return new Promise((resolve, reject) => {
+        const bufs = [];
+        (function next(i) {
+          if (i >= parts.length) {
+            resolve(URL.createObjectURL(new Blob(bufs)));
+            return;
+          }
+          fetch(parts[i]).then(r => {
+            if (!r.ok) throw new Error("Failed: " + parts[i]);
+            return r.arrayBuffer();
+          }).then(b => { bufs.push(b); next(i + 1); }).catch(reject);
+        })(0);
+      });
+    }
+    function getParts(file, count) {
+      const p = [];
+      for (let i = 1; i <= count; i++)p.push(file + ".part" + i);
+      return p;
+    }
+
+    loadingBar.style.display = "block";
+
+    const script = document.createElement("script");
+    script.src = loaderUrl;
+    script.onload = async () => {
+      try {
+        const [dataUrl, wasmUrl] = await Promise.all([
+          mergeFiles(getParts(buildUrl + "/cornball.data", 2)),
+          mergeFiles(getParts(buildUrl + "/cornball.wasm", 2))
+        ]);
+        config.dataUrl = dataUrl;
+        config.codeUrl = wasmUrl;
+
+        createUnityInstance(canvas, config, (progress) => {
+          progressBarFull.style.width = (progress * 100) + "%";
+        }).then(() => {
+          loadingBar.style.display = "none";
+          URL.revokeObjectURL(dataUrl);
+          URL.revokeObjectURL(wasmUrl);
+        }).catch(alert);
+      } catch (e) { alert(e); }
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+
+</html>
